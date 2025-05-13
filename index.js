@@ -49,6 +49,17 @@ const chatAsMember = async (member, topic, contextMessages) => {
 }
 
 
+const summarize = async (member, topic, inputMessages) => {
+    const messages = [{
+        role: 'system',
+        content: `You are a ${member.role} of a team of software engineer and product manager. You are tasked to summarize the previous messages about the following topic: ${topic}. Please, provide a summary no longer than 500 words.`
+    },
+    ...inputMessages
+    ];
+    const response = await chat(member.model.name, messages);
+    return response.message.content;
+}
+
 const conversate = async (members, topic) => {
     const randomIndex = Math.floor(Math.random() * members.length);
     let member = members[randomIndex];
@@ -67,16 +78,8 @@ const conversate = async (members, topic) => {
         member = members.filter(m => m !== member)[Math.floor(Math.random() * (members.length - 1))];
 
         if (member.role === 'product manager') {
-            messages.push({
-                role: 'user',
-                content: `Normie, please summarize the conversation so far.`
-            });
-            const summary = await chatAsMember(member, topic, messages);
-            messages = [{
-                role: 'assistant',
-                content: summary
-            }]
-            console.log('Summary:', summary);
+            const summary = await summarize(member, topic, messages);
+            console.log(' > > > Summary is:', summary);
             outcome = await evaluateSummary(member, summary, topic);
 
             if (outcome) {
@@ -93,14 +96,14 @@ const evaluateSummary = async (member, summary, topic) => {
     },
     {
         role: 'user',
-        content: `Please evaluate the summary and evaluate if this is completed. If it reached a reasonable outcome, please explicitly write "it is over" and provide a 200 words outcome, otherwise we need to continue the conversation.`
+        content: `Please evaluate the summary and evaluate if this is completed. If it reached a reasonable outcome, please explicitly write "Outcome ready" and provide a 1000 words outcome, otherwise we need to continue the conversation.`
     }
     ];
     const response = await chat(member.role, messages);
-    if (response.includes('it is over')) {
+    if (response.includes('Outcome ready')) {
         return response
     } else {
-        console.log('Summary is not completed yet. Continuing the conversation...');
+        console.log('> > > > > > Summary is not completed yet. Continuing the conversation...');
         return null;
     }
 }
