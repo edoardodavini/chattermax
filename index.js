@@ -1,16 +1,30 @@
 // Example usage (in another file, e.g., app.js)
-import { list, generate } from './chat.js';
+import { list, generate, chat } from './chat.js';
+import fs from 'fs';
+
 
 const URL = 'http://192.168.160.250:11434';
-const MODEL_NAME = 'gemma3:4b'
+const config = {
+    stateful: true
+}
 
-async function main(members) {
+async function main(newMembers) {
     try {
         const models = await list()
-        modelPicking(members, models.models);
+        const members = modelPicking(newMembers, models.models);
 
-        const topic = await generateTopic()
-        console.log('Topic:', topic);
+        const topic = await generateTopic({ stateful: config.stateful });
+        console.log('Topic is:', topic);
+
+        const outcome = await conversate(members, topic);
+
+        console.log('**************************************************');
+        console.log('**************************************************');
+        console.log('**************************************************');
+        console.log('**************************************************');
+        console.log('  ')
+        console.log('  ')
+        console.log('Outcome is:', outcome);
 
         // const generateResponse = await generate('Hello, how are you?')
         // console.log('Ollama Generate Response:', generateResponse);
@@ -19,21 +33,104 @@ async function main(members) {
     }
 }
 
-const modelPicking = async (members, models) => {
-    // console.log('Available models:', models);
-    models = models.filter(model => model.name !== 'llama4:latest'); // Filter out the llama4:latest model
-    for (const member of members) {
-        const modelsLength = models.length;
-        const model = models[Math.floor(Math.random() * modelsLength)];
-        console.log(`Member: Hi, I'm ${member.name} and I'm picking the ${model.name} model at ${Math.round(model.size / 1024 / 1024 / 102.4) / 10} GB`);
+const chatAsMember = async (member, topic, contextMessages) => {
+    const messages = [{
+        role: 'system',
+        content: `You are a member of a team of software engineer and product manager. You are discussing the following topic: ${topic}. Responses are expected to be short and concise`
+    },
+    ...contextMessages,
+    {
+        role: 'system',
+        content: `You are ${member.name}: ${member.description}. Your personality is: ${member.personality}. Please, provide a solution no longer than 2 sentences or 50 words.`
+    }
+    ];
+    const response = await chat(member.model.name, messages);
+    return response.message.content;
+}
 
-        models.splice(models.indexOf(model), 1); // Remove the picked model from the list
+
+const conversate = async (members, topic) => {
+    const randomIndex = Math.floor(Math.random() * members.length);
+    let member = members[randomIndex];
+    let outcome = null;
+    let messages = []
+
+    while (!outcome) {
+        const response = await chatAsMember(member, topic, messages);
+        console.log(`${member.name} (${member.role}): ${response}`);
+
+        messages.push({
+            role: 'user',
+            content: response
+        });
+
+        member = members.filter(m => m !== member)[Math.floor(Math.random() * (members.length - 1))];
+
+        if (member.role === 'product manager') {
+            messages.push({
+                role: 'user',
+                content: `Normie, please summarize the conversation so far.`
+            });
+            const summary = await chatAsMember(member, topic, messages);
+            messages = [{
+                role: 'assistant',
+                content: summary
+            }]
+            console.log('Summary:', summary);
+            outcome = await evaluateSummary(member, summary, topic);
+
+            if (outcome) {
+                return outcome
+            }
+        }
     }
 }
 
-const generateTopic = async () => {
-    console.log('Generating topic...');
-    return generate('gemma3:12b', 'Please, help me define a topic for a meeting. The topic should be focused on enhancing an idea for a new startup. Generate the idea itself, max 100 words. Do not include any other information.');
+const evaluateSummary = async (member, summary, topic) => {
+    const messages = [{
+        role: 'system',
+        content: `You are a ${member.name}, a ${member.role}. You are evaluating the following summary of a conversation: ${summary}. The topic of the conversation is: ${topic}.`
+    },
+    {
+        role: 'user',
+        content: `Please evaluate the summary and evaluate if this is completed. If it reached a reasonable outcome, please explicitly write "it is over" and provide a 200 words outcome, otherwise we need to continue the conversation.`
+    }
+    ];
+    const response = await chat(member.role, messages);
+    if (response.includes('it is over')) {
+        return response
+    } else {
+        console.log('Summary is not completed yet. Continuing the conversation...');
+        return null;
+    }
+}
+
+const modelPicking = (members, models) => {
+    models = models.filter(model => model.name !== 'llama4:latest'); // Filter out the llama4:latest model
+
+    return members.map(member => {
+        const modelsLength = models.length;
+        const model = models[Math.floor(Math.random() * modelsLength)];
+        // console.log(`Member: Hi, I'm ${member.name} and I'm picking the ${model.name} model at ${Math.round(model.size / 1024 / 1024 / 102.4) / 10} GB`);
+
+        member.model = model; // Assign the model to the member
+        models.splice(models.indexOf(model), 1); // Remove the picked model from the list
+        return member;
+    }
+    );
+}
+
+const generateTopic = async ({ stateful = false }) => {
+    // console.log('Generating topic...');
+    let topic = '';
+    if (stateful && fs.existsSync('topic.txt')) {
+        topic = fs.readFileSync('topic.txt', 'utf-8');
+        console.log('Topic loaded from file:', topic);
+    } else {
+        topic = await generate('gemma3:12b', 'Please, help me define a topic for a meeting. The topic should be focused on enhancing an idea for a new startup. Generate the idea itself, max 100 words. Do not include any other information.');
+        fs.writeFileSync('topic.txt', topic);
+    }
+    return topic;
 }
 
 const members = [
