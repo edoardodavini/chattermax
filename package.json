@@ -1,0 +1,17 @@
+{
+  "name": "ai-interaction",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "chat": "node index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "ollama": "^0.5.15",
+    "openai": "^4.98.0"
+  }
+}
