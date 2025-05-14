@@ -3,20 +3,37 @@ import { list, generate, chat } from './chat.js';
 import fs from 'fs';
 
 
-const URL = 'http://192.168.160.250:11434';
 const config = {
-    stateful: true
+    stateful: false,
+    outputFile: 'output.txt',
+    summaryFile: 'summary.md',
 }
 
 async function main(newMembers) {
+    const formattedDate = new Date().toISOString().substring(0, 19).replace('T', '_').replace(/:/g, '-');
+    fs.mkdirSync(`runs/${formattedDate}`, { recursive: true });
+    config.outputFile = `runs/${formattedDate}/output.txt`;
+    config.summaryFile = `runs/${formattedDate}/summary.md`;
     try {
-        const models = await list()
+        const models = {
+            models: [
+                { name: 'gemma3:1b' },
+                { name: 'gemma3:1b' },
+                { name: 'gemma3:1b' },
+                { name: 'gemma3:1b' }
+            ]
+        }
         const members = modelPicking(newMembers, models.models);
 
         const topic = await generateTopic({ stateful: config.stateful });
-        console.log('Topic is:', topic);
 
         const outcome = await conversate(members, topic);
+        appendToSummaryFile(`
+
+            # OUTCOME 
+            
+            ${outcome}
+        `);
 
         console.log('**************************************************');
         console.log('**************************************************');
@@ -25,9 +42,6 @@ async function main(newMembers) {
         console.log('  ')
         console.log('  ')
         console.log('Outcome is:', outcome);
-
-        // const generateResponse = await generate('Hello, how are you?')
-        // console.log('Ollama Generate Response:', generateResponse);
     } catch (error) {
         console.error('Error in main:', error);
     }
@@ -66,9 +80,12 @@ const conversate = async (members, topic) => {
     let outcome = null;
     let messages = []
 
+    let counter = 0;
+
     while (!outcome) {
         const response = await chatAsMember(member, topic, messages);
-        console.log(`${member.name} (${member.role}): ${response}`);
+        console.log(`[${counter}] - ${member.name} (${member.role}): ${response}`);
+        appendToFile(`[${counter}] - ${member.name} (${member.role}): ${response}`);
 
         messages.push({
             role: 'user',
@@ -77,9 +94,16 @@ const conversate = async (members, topic) => {
 
         member = members.filter(m => m !== member)[Math.floor(Math.random() * (members.length - 1))];
 
-        if (member.role === 'product manager') {
+        counter++;
+        if (member.role === 'Product Manager') {
             const summary = await summarize(member, topic, messages);
             console.log(' > > > Summary is:', summary);
+            appendToFile('Summary. \n' + summary);
+            appendToSummaryFile(`
+                ## Summary. [${counter}] 
+                
+                ${summary}
+            `);
             outcome = await evaluateSummary(member, summary, topic);
 
             if (outcome) {
@@ -96,10 +120,10 @@ const evaluateSummary = async (member, summary, topic) => {
     },
     {
         role: 'user',
-        content: `Please evaluate the summary and evaluate if this is completed. If it reached a reasonable outcome, please explicitly write "Outcome ready" and provide a 1000 words outcome, otherwise we need to continue the conversation.`
+        content: `Please evaluate the summary and evaluate if this is completed. If it reached a reasonable outcome, please explicitly write "Outcome ready" and provide a 1000 words outcome. Use markdown as output, nothing else. Otherwise we need to continue the conversation.`
     }
     ];
-    const response = await chat(member.role, messages);
+    const response = (await chat(member.model.name, messages)).message.content;
     if (response.includes('Outcome ready')) {
         return response
     } else {
@@ -109,12 +133,12 @@ const evaluateSummary = async (member, summary, topic) => {
 }
 
 const modelPicking = (members, models) => {
-    models = models.filter(model => model.name !== 'llama4:latest'); // Filter out the llama4:latest model
 
     return members.map(member => {
         const modelsLength = models.length;
         const model = models[Math.floor(Math.random() * modelsLength)];
-        // console.log(`Member: Hi, I'm ${member.name} and I'm picking the ${model.name} model at ${Math.round(model.size / 1024 / 1024 / 102.4) / 10} GB`);
+        appendToFile(`Member: Hi, I'm ${member.name} and I'm picking the ${model.name} model at ${Math.round(model.size / 1024 / 1024 / 102.4) / 10} GB`);
+        appendToSummaryFile(`Member: ${member.name}. Model: ${model.name}. Size: ${Math.round(model.size / 1024 / 1024 / 102.4) / 10} GB`);
 
         member.model = model; // Assign the model to the member
         models.splice(models.indexOf(model), 1); // Remove the picked model from the list
@@ -123,8 +147,14 @@ const modelPicking = (members, models) => {
     );
 }
 
+const appendToFile = (content) => {
+    fs.appendFileSync(config.outputFile, content + '\n')
+}
+const appendToSummaryFile = (content) => {
+    fs.appendFileSync(config.summaryFile, content + '\n')
+}
+
 const generateTopic = async ({ stateful = false }) => {
-    // console.log('Generating topic...');
     let topic = '';
     if (stateful && fs.existsSync('topic.txt')) {
         topic = fs.readFileSync('topic.txt', 'utf-8');
@@ -133,6 +163,8 @@ const generateTopic = async ({ stateful = false }) => {
         topic = await generate('gemma3:12b', 'Please, help me define a topic for a meeting. The topic should be focused on enhancing an idea for a new startup. Generate the idea itself, max 100 words. Do not include any other information.');
         fs.writeFileSync('topic.txt', topic);
     }
+    appendToFile(`Topic: ${topic}`);
+    appendToSummaryFile(`Topic: ${topic}`);
     return topic;
 }
 
