@@ -3,7 +3,6 @@ import { Ollama } from 'ollama';
 
 const ollama = new Ollama({
   host: 'https://apiai.edoardodavini.it', // Replace with your Ollama server address
-
 })
 
 export const list = async () => (await (ollama.list())).models
