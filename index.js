@@ -14,7 +14,7 @@ const context = {
     pickableModels: ['qwen2.5vl:7b'],
     step: 0,
     prompts: {
-        topic: 'Generate a random topic for a startup. The topic should be no longer than 80 words.',
+        topic: 'Propose a random topic for a startup. The topic should be no longer than 120 words.',
     }
 }
 
