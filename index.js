@@ -1,6 +1,6 @@
 // Example usage (in another file, e.g., app.js)
-import { list, generate, chat } from './chat.js';
-import { appendToFile, appendToSummaryFile } from './util.js';
+import { generate, list } from './chat.js';
+import { appendToFile, appendToSummaryFile, writeOutcome } from './util.js';
 import { conversate } from './conversation.js';
 import fs from 'fs';
 
@@ -8,45 +8,25 @@ const context = {
     stateful: false,
     outputFile: 'output.txt',
     summaryFile: 'summary.md',
-    date: new Date().toISOString().substring(0, 19).replace('T', '_').replace(/:/g, '-')
+    outcomeFile: 'outcome.md',
+    date: new Date().toISOString().substring(0, 10),
+    titleModel: 'qwen2.5vl:7b',
+    pickableModels: ['qwen2.5vl:7b'],
+    step: 0,
+    prompts: {
+        topic: 'Generate a random topic for a startup. The topic should be no longer than 80 words.',
+    }
 }
 
 async function main(newMembers) {
-    fs.mkdirSync(`runs/${context.date}`, { recursive: true });
-    context.outputFile = `runs/${context.date}/output.txt`;
-    context.summaryFile = `runs/${context.date}/summary.md`;
     try {
-        const topic = await generateTopic({ stateful: context.stateful });
-        appendToFile(context, `Topic: ${topic}`);
-        appendToSummaryFile(context, `
-            > ${context.date}
-
-            Topic: ${topic}
-        `);
-
-        const models = {
-            models: [
-                { name: 'gemma3:1b' },
-                { name: 'gemma3:1b' },
-                { name: 'gemma3:1b' },
-                { name: 'gemma3:1b' }
-            ]
-        }
-        const members = modelPicking(newMembers, models.models);
-
-        const outcome = await conversate(context, members, topic);
-        appendToSummaryFile(context, `
-
-            # OUTCOME 
-            
-            ${outcome}
-        `);
-
-        console.log('**************************************************');
-        console.log('  ')
-        console.log('Outcome is:', outcome);
-        console.log('  ')
-        console.log('**************************************************');
+        await generateTopic(context);
+        prepareTitle(context);
+        console.log(`>>>> ${context.name} <<<<`)
+        context.members = await modelPicking(newMembers, context.pickableModels);
+        const outcome = await conversate(context);
+        writeOutcome(context, outcome);
+        console.log(`OUTCOME HAS BEEN GENERATED. Check the summary file: ${outcome.length} characters`);
 
     } catch (error) {
         console.error('Error in main:', error);
@@ -54,58 +34,70 @@ async function main(newMembers) {
 }
 
 
-const modelPicking = (members, models) => {
+const prepareTitle = (context) => {
+    fs.mkdirSync(`runs/${context.date}-${context.name.replaceAll(' ', '-')}`, { recursive: true });
+    context.outputFile = `runs/${context.date}-${context.name.replaceAll(' ', '-')}/output.txt`;
+    context.summaryFile = `runs/${context.date}-${context.name.replaceAll(' ', '-')}/summary.md`;
+    context.outcomeFile = `runs/${context.date}-${context.name.replaceAll(' ', '-')}/outcome.md`;
+    appendToFile(context, `Topic: ${context.topic}`);
+    appendToSummaryFile(context, `
+> ${context.date}
 
+# ${context.name}
+
+> ${context.icon} Topic
+> 
+> ${context.topic}
+>
+        `);
+}
+
+const modelPicking = async (members, pickableModels) => {
+    const availableModels = await list();
+
+    appendToSummaryFile(context, `
+-------------
+| Name | Model | Size |            
+|---|---|---|`);
     return members.map(member => {
-        const modelsLength = models.length;
-        const model = models[Math.floor(Math.random() * modelsLength)];
+        const modelsLength = pickableModels.length;
+        const modelName = pickableModels[Math.floor(Math.random() * modelsLength)];
+        const model = availableModels.find(m => m.name === modelName);
+        if (!model) {
+            console.error(`Model ${modelName} not found in available models.`);
+            process.exit(1);
+        }
         appendToFile(context, `Member: Hi, I'm ${member.name} and I'm picking the ${model.name} model at ${Math.round(model.size / 1024 / 1024 / 102.4) / 10} GB`);
-        appendToSummaryFile(context, `Member: ${member.name}. Model: ${model.name}. Size: ${Math.round(model.size / 1024 / 1024 / 102.4) / 10} GB`);
-
+        appendToSummaryFile(context, `| ${member.name} | ${model.name} | ${Math.round(model.size / 1024 / 1024 / 102.4) / 10} GB |`);
         member.model = model; // Assign the model to the member
-        models.splice(models.indexOf(model), 1); // Remove the picked model from the list
         return member;
     }
     );
 }
 
-
-const generateTopic = async ({ stateful = false }) => {
-    let topic = '';
-    if (stateful && fs.existsSync('topic.txt')) {
-        topic = fs.readFileSync('topic.txt', 'utf-8');
-        console.log('Topic loaded from file:', topic);
-    } else {
-        topic = await generate('gemma3:12b', 'Please, help me define a topic for a meeting. The topic should be focused on enhancing an idea for a new startup. Generate the idea itself, max 100 words. Do not include any other information.');
-        fs.writeFileSync('topic.txt', topic);
-    }
-    return topic;
+const generateTopic = async (context) => {
+    context.topic = await generate(context.titleModel, context.prompts.topic);
+    context.name = await generate(context.titleModel, `Please, generate a startup name that is focused in achieving this: ${context.topic}. The name should be short and catchy. Return the name only, no other information. Do not include any other information.`);
+    context.icon = await generate(context.titleModel, `Please, generate a startup emoji that is representing: ${context.topic}. Return the emoji only, no other information. Do not include any other information.`);
+    context.topic = await generate(context.titleModel, `Please, update the topic of the startup ${context.name} to be more catchy and attractive. The topic is: ${context.topic}. Return the topic only, no other information. Do not include any other information.`);
+    return { context };
 }
 
 const members = [
     {
-        name: 'Lame',
-        description: 'Lame is an intern software engineer with a passion for coding and technology.He is always eager to learn new skills. He is a bit careful and sometimes overthinks things, but he is a quick learner and is always willing to help others.',
-        personality: 'Lame is a young and careful person. Overthinks things a lot and he is usually avoiding getting himself in risky situations. He prefer playing safe and is a bit of a coward.',
-        role: 'Intern Software Engineer'
+        name: 'Mark',
+        description: 'Mark is a finance senior analyst with a strong background in data analysis and financial modeling. He knows how to build a business case and is always looking for ways to improve processes.',
+        role: 'Finance Senior Analyst'
     },
     {
-        name: 'Guru',
-        description: 'Guru is a senior software engineer with expertise in machine learning and pretty much everything. He loves findings bugs and analyzing data from monitoring platforms to collect insights that can drive business decisions.',
-        personality: 'Guru is a middle-age, grown, wise and very smart person. Even if he knows pretty much everything, he is not very deep in any specific topic. He is not afraid to share his opinions, he likes to fix issues and he is capable of taking risks if needed.',
-        role: 'Data Scientist'
+        name: 'David',
+        description: 'David is a senior software engineer with expertise in machine learning and pretty much everything. He loves findings bugs and analyzing data from monitoring platforms to collect insights that can drive business decisions.',
+        role: 'Software Engineer'
     },
     {
-        name: 'Geek',
-        description: 'Geek is a DevOps engineer with experience in cloud computing and infrastructure management. He is passionate about automation and improving deployment processes.',
-        personality: 'Geek is a young, turbulent genius. He likes to take risks, even when not necessarily needed. Doing so, he often finds himself in trouble. Thanks to his extraordinary intelligence, he usually comes out of those troubles with little-to-no consequences, even if that requires a lot of work.',
-        role: 'DevOps Engineer'
-    },
-    {
-        name: 'Normie',
-        description: 'Normie is a product manager. He enjoys working with cross-functional teams to deliver high-quality products. He has great communication skills and is always looking for ways to improve processes.',
-        personality: 'Normie is a grown adult, wise and calm. He do not speack much, prefers to listen and is very careful with his words. Everyone has high esteem of him and he is very well respected. His opinions are usually the ones that matter the most.',
-        role: 'Product Manager'
+        name: 'Amelie',
+        description: 'Amelie is a Business Development Manager. She always focuses on the business side of the product. She is a great communicator and has a strong understanding of market trends and customer needs.',
+        role: 'Business Development Manager'
     }
 ]
 main(members);
