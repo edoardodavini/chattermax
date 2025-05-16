@@ -1,14 +1,14 @@
 import { chat } from './chat.js';
 
-export const summarize = async (context, member, topic, inputMessages) => {
+export const summarize = async (context, member) => {
     const messages = [
-        ...inputMessages,
+        ...context.messages,
         {
             role: 'system',
             content: `
 You are a ${member.role} in a dynamic startup.
 The name of the startup is ${context.name}.
-You are tasked to summarize the previous messages about the following topic: ${topic}. 
+You are tasked to summarize the previous messages about the following topic: ${context.topic}. 
 Please, provide a summary no longer than 500 words.`
         }
     ];
@@ -16,7 +16,7 @@ Please, provide a summary no longer than 500 words.`
     return response.message.content;
 }
 
-export const evaluateSummary = async (context, member, summary, topic) => {
+export const evaluateSummary = async (context, member) => {
     const messages = [{
         role: 'system',
         content: `
@@ -31,7 +31,7 @@ Your goal is to evaluate if the summary is good enough to be used as a final out
         content: `
 This is the summary of the conversation: 
 
-${summary}
+${context.summary}
 
 `
     },
@@ -56,3 +56,27 @@ The outcome must include a product plan for the first year. `
     }
 }
 
+export const generateName = async (context, member) => {
+    const messages = [
+        {
+            role: 'system',
+            content: `
+You are the CEO of the new startup ${context.name}.
+You are generating a name for the startup.
+`
+        },
+        {
+            role: 'user',
+            content: `
+This is the outcome of the conversation: ${context.outcome}
+`
+        },
+        {
+            role: 'system',
+            content: `
+Generate a name for the startup. Return only the name. Nothing else should be included.`
+        }
+    ];
+    const response = await chat(member.model.name, messages);
+    return response.message.content;
+}

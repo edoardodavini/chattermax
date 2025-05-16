@@ -1,30 +1,31 @@
 import { chat } from './chat.js';
 import { appendToFile, appendToSummaryFile } from './util.js';
-import { summarize, evaluateSummary } from './summary.js';
+import { summarize, evaluateSummary, generateName } from './summary.js';
 
-const chatAsMember = async (context, member, contextMessages) => {
+const chatAsMember = async (context, member) => {
     const messages = [{
         role: 'system',
         content: `
 You are: ${member.name}
 Here is a brief description of you: ${member.description} 
 You are part of a group of very smart people.
-You are discussing the following startup: ${context.name}
-The startup focus is: ${context.topic}.
+You are discussing the idea of launching a startup.
+You are united together to define what should be the focus of the startup.
 `
     },
     {
         role: 'admin',
         content: context.summary
     },
-    ...contextMessages,
+    ...context.messages,
     {
         role: 'system',
         content: `
 You are ${member.name}
-Try to analyze the startup and its potential.
-Analyze previous messages and propose a solution for one single issue that was presented.
-Once that's done, analyze the startup and find a new issue that was not presented yet.
+Here is a brief description of you: ${member.description} 
+You are trying to analyze a good idea for a startup.
+Analyze previous messages and try to propose an idea for a startup.
+If an idea is already proposed, try to improve it or find a fluke in it.
 
 Do not repeat what has already been said. Focus only on the content of the message. Do not include any other information or exclamations.
 `
@@ -38,36 +39,34 @@ export const conversate = async (context) => {
     const randomIndex = Math.floor(Math.random() * context.members.length);
     let member = context.members[randomIndex];
     let outcome = null;
-    let messages = []
 
     while (!outcome) {
-        const response = await chatAsMember(context, member, messages);
+        const response = await chatAsMember(context, member);
         console.log(`[${context.step}] ${member.name} (${member.role}) contributed`);
-        appendToFile(context, `[${context.step}] ${member.name} (${member.role}): ${response}`);
-
-        messages.push({
+        context.messages.push({
             role: 'user',
             content: `I am ${member.name} with the role ${member.role}. This is my insight: ${response}`
         });
+        appendToFile(context, `[${context.step}] ${member.name} (${member.role}): ${response}`);
 
         member = context.members.filter(m => m !== member)[Math.floor(Math.random() * (context.members.length - 1))];
 
         context.step++;
         if (context.step % 5 === 0) {
             console.log(`[${context.step}] Generating summary...`);
-            const summary = await summarize(context, member, context.topic, messages);
-            console.log(`[${context.step}] Summary generated: it is ${summary.length} characters`);
-            context.summary = summary;
-            appendToFile(context, 'Summary. \n' + summary);
+            context.summary = await summarize(context, member);
+            console.log(`[${context.step}] Summary generated: it is ${context.summary.length} characters`);
+            appendToFile(context, 'Summary. \n' + context.summary);
             appendToSummaryFile(context, `
 ## Summary. [${context.step}] 
 
-${summary}
+${context.summary}
             `);
-            outcome = await evaluateSummary(context, member, summary, context.topic);
+            context.outcome = await evaluateSummary(context, member, context.summary, context.topic);
+            context.name = await generateName(context, member);
 
-            if (outcome) {
-                return outcome
+            if (context.outcome) {
+                return context.outcome
             }
         }
     }

@@ -1,5 +1,5 @@
 import { generate, list } from './libs/chat.js';
-import { appendToFile, appendToSummaryFile, writeOutcome } from './libs/util.js';
+import { appendToFile, appendToSummaryFile, writeOutcome, uuid } from './libs/util.js';
 import { conversate } from './libs/conversation.js';
 import fs from 'fs';
 
@@ -9,21 +9,25 @@ const context = {
     summaryFile: 'summary.md',
     outcomeFile: 'outcome.md',
     date: new Date().toISOString().substring(0, 10),
-    titleModel: 'qwen2.5vl:7b',
-    pickableModels: ['qwen2.5vl:7b'],
+    titleModel: 'llama4:scout',
+    pickableModels: ['llama4:scout'],
     step: 0,
+    uuid: uuid(),
+    messages: [],
+    summary: '',
+    outcome: null,
     prompts: {
-        topic: 'Propose a random topic for a startup. The topic should be no longer than 120 words.',
+        topic: 'Propose a random topic for a startup. The topic should be no longer than 120 words.'
     }
 }
 
 async function main(newMembers) {
     try {
-        await generateTopic(context);
-        prepareTitle(context);
-        console.log(`>>>> ${context.name} <<<<`)
+        console.log(`>>>> ${context.uuid} <<<<`)
+        prepareDir(context);
         context.members = await modelPicking(newMembers, context.pickableModels);
         const outcome = await conversate(context);
+        updateDir(context);
         writeOutcome(context, outcome);
         console.log(`OUTCOME HAS BEEN GENERATED. Check the summary file: ${outcome.length} characters`);
 
@@ -32,12 +36,22 @@ async function main(newMembers) {
     }
 }
 
+const updateDir = (context) => {
+    const dirName = `runs/${context.date}-${context.name}`;
+    fs.mkdirSync(dirName, { recursive: true });
+    context.outputFile = `${dirName}/output.txt`;
+    context.summaryFile = `${dirName}/summary.md`;
+    context.outcomeFile = `${dirName}/outcome.md`;
+    fs.cpSync(`runs/${context.date}-${context.uuid}`, dirName, { recursive: true, force: true });
+    fs.rmSync(`runs/${context.date}-${context.uuid}`, { recursive: true, force: true });
+}
 
-const prepareTitle = (context) => {
-    fs.mkdirSync(`runs/${context.date}-${context.name.replaceAll(' ', '-')}`, { recursive: true });
-    context.outputFile = `runs/${context.date}-${context.name.replaceAll(' ', '-')}/output.txt`;
-    context.summaryFile = `runs/${context.date}-${context.name.replaceAll(' ', '-')}/summary.md`;
-    context.outcomeFile = `runs/${context.date}-${context.name.replaceAll(' ', '-')}/outcome.md`;
+const prepareDir = (context) => {
+    const dirName = `runs/${context.date}-${context.uuid}`;
+    fs.mkdirSync(dirName, { recursive: true });
+    context.outputFile = `${dirName}/output.txt`;
+    context.summaryFile = `${dirName}/summary.md`;
+    context.outcomeFile = `${dirName}/outcome.md`;
     appendToFile(context, `Topic: ${context.topic}`);
     appendToSummaryFile(context, `
 > ${context.date}
