@@ -1,7 +1,6 @@
-// Example usage (in another file, e.g., app.js)
-import { generate, list } from './chat.js';
-import { appendToFile, appendToSummaryFile, writeOutcome } from './util.js';
-import { conversate } from './conversation.js';
+import { generate, list } from './libs/chat.js';
+import { appendToFile, appendToSummaryFile, writeOutcome } from './libs/util.js';
+import { conversate } from './libs/conversation.js';
 import fs from 'fs';
 
 const context = {

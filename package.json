@@ -1,11 +1,11 @@
 {
   "name": "ai-interaction",
   "version": "1.0.0",
-  "main": "index.js",
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "chat": "node index.js"
+    "startup": "node src/startup.js",
+    "models": "node src/models.js"
   },
   "author": "",
   "license": "ISC",
