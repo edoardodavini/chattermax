@@ -23,7 +23,7 @@ A Magic AI that chats with himself to generate business ideas
 
 1. `git clone`
 2. `docker compose up`
-    a. `ollama pull qwen2.5vl:7b` (or whatever model you want to use)
+    1. `ollama pull qwen2.5vl:7b` (or whatever model you want to use)
 3. `npm i`
 4. Change the IP in `chat.js` wrapper to your local thing, most likely `localhost:11434` or something like that
 5. `npm run chat`
